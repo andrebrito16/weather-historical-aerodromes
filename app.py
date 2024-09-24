@@ -10,6 +10,7 @@ from io import BytesIO
 def process_csv_data(uploaded_files):
     # List to hold all individual dataframes
     all_dataframes = []
+    files_without_data = []
 
     # Iterate through each uploaded file and process it
     for file in uploaded_files:
@@ -23,6 +24,13 @@ def process_csv_data(uploaded_files):
         df['datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Hora (UTC)'].astype(str).str.zfill(4), format='%d/%m/%Y %H%M')
 
         # Convert wind speed from m/s to knots and ensure it's numeric
+        no_wind_speed_data = df['wind_speed'].isnull().sum() == len(df)
+        no_wind_dir_data = df['wind_dir'].isnull().sum() == len(df)
+
+        if no_wind_speed_data or no_wind_dir_data:
+            files_without_data.append(file.name)
+            continue
+        
         df['wind_speed'] = pd.to_numeric(df['wind_speed'].str.replace(',', '.'), errors='coerce') * 1.94384
 
         # Ensure wind direction is numeric
@@ -35,12 +43,14 @@ def process_csv_data(uploaded_files):
         all_dataframes.append(df)
 
     # Concatenate all dataframes into a single one
+    if len(all_dataframes) == 0:
+        return None, files_without_data
     combined_df = pd.concat(all_dataframes, ignore_index=True)
 
     # Drop any remaining NaNs, if they exist
     combined_df = combined_df.dropna(subset=['wind_speed', 'wind_dir'])
 
-    return combined_df
+    return combined_df, files_without_data
 
 # Function to create a wind rose plot
 def create_wind_rose(wind_speed, wind_dir, title, ax=None):
@@ -110,8 +120,14 @@ if uploaded_files:
 
     if st.button("Generate Wind Rose Plots"):
         # Process the uploaded files
-        combined_data = process_csv_data(uploaded_files)
+        combined_data, invalid_files = process_csv_data(uploaded_files)
 
+        if len(invalid_files) == len(uploaded_files):
+            st.write("No valid data found in the uploaded files.")
+            st.stop()
+
+        if len(invalid_files) > 0:
+            st.warning(f"Data not found in the following files: {', '.join(invalid_files)}")
         # Generate the combined wind rose plot (all bins in one figure)
         st.subheader("Combined Wind Rose Plot")
         combined_fig = plot_combined_wind_roses(combined_data)
