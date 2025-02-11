@@ -15,7 +15,7 @@ def process_csv_data(uploaded_files):
     # Iterate through each uploaded file and process it
     for file in uploaded_files:
         # Read the CSV file without combining dates
-        df = pd.read_csv(file, sep=';')
+        df = pd.read_csv(file, sep=';', decimal=',')
 
         # Rename columns
         df.columns = ['Data', 'Hora (UTC)', 'temp', 'humidity', 'pressure', 'wind_speed', 'wind_dir', 'cloudiness', 'insolation', 'max_temp', 'min_temp', 'rainfall']
@@ -23,18 +23,16 @@ def process_csv_data(uploaded_files):
         # Combine 'Data' and 'Hora (UTC)' into a single 'datetime' column after reading
         df['datetime'] = pd.to_datetime(df['Data'] + ' ' + df['Hora (UTC)'].astype(str).str.zfill(4), format='%d/%m/%Y %H%M')
 
-        # Convert wind speed from m/s to knots and ensure it's numeric
+        # Check for missing wind data
         no_wind_speed_data = df['wind_speed'].isnull().sum() == len(df)
         no_wind_dir_data = df['wind_dir'].isnull().sum() == len(df)
 
         if no_wind_speed_data or no_wind_dir_data:
             files_without_data.append(file.name)
             continue
-        
-        df['wind_speed'] = pd.to_numeric(df['wind_speed'].str.replace(',', '.'), errors='coerce') * 1.94384
 
-        # Ensure wind direction is numeric
-        df['wind_dir'] = pd.to_numeric(df['wind_dir'].str.replace(',', '.'), errors='coerce')
+        # Convert wind speed from m/s to knots (numbers are already properly parsed due to decimal=',')
+        df['wind_speed'] = df['wind_speed'] * 1.94384
 
         # Drop rows with NaN values in wind speed or direction
         df = df.dropna(subset=['wind_speed', 'wind_dir'])
