@@ -143,7 +143,21 @@ def fig_to_png(fig):
     return buf
 
 # Streamlit app layout and logic
-st.title("Wind Rose Plot Generator")
+st.set_page_config(
+    page_title="Wind Rose Generator - Meteorological Data",
+    page_icon="🌪️",
+    layout="wide"
+)
+
+# Title and description
+st.title("🌪️ Wind Rose Plot Generator")
+st.markdown("""
+### Análise de Dados Meteorológicos
+Gere rosa dos ventos a partir de dados meteorológicos. Faça upload de arquivos CSV contendo dados de velocidade e direção do vento.
+""")
+
+# Add a divider for better visual organization
+st.divider()
 
 # Add unit selection dropdown
 output_unit = st.selectbox(
