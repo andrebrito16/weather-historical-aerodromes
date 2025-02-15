@@ -6,11 +6,20 @@ import matplotlib.pyplot as plt
 from windrose import WindroseAxes
 from io import BytesIO
 
+# Constants for wind speed conversions
+WIND_SPEED_UNITS = {
+    "knots": {"factor": 1.94384, "label": "knots"},
+    "m/s": {"factor": 1.0, "label": "m/s"},
+    "km/h": {"factor": 3.6, "label": "km/h"}
+}
+
 # Function to process and combine all uploaded CSV files
-def process_csv_data(uploaded_files):
+def process_csv_data(uploaded_files, output_unit="knots"):
     # List to hold all individual dataframes
     all_dataframes = []
     files_without_data = []
+
+    conversion_factor = WIND_SPEED_UNITS[output_unit]["factor"]
 
     # Iterate through each uploaded file and process it
     for file in uploaded_files:
@@ -31,8 +40,8 @@ def process_csv_data(uploaded_files):
             files_without_data.append(file.name)
             continue
 
-        # Convert wind speed from m/s to knots (numbers are already properly parsed due to decimal=',')
-        df['wind_speed'] = df['wind_speed'] * 1.94384
+        # Convert wind speed from m/s to selected unit
+        df['wind_speed'] = df['wind_speed'] * conversion_factor
 
         # Drop rows with NaN values in wind speed or direction
         df = df.dropna(subset=['wind_speed', 'wind_dir'])
@@ -51,7 +60,7 @@ def process_csv_data(uploaded_files):
     return combined_df, files_without_data
 
 # Function to create a wind rose plot
-def create_wind_rose(wind_speed, wind_dir, title, ax=None):
+def create_wind_rose(wind_speed, wind_dir, title, output_unit, ax=None):
     if ax is None:
         ax = WindroseAxes.from_ax()
 
@@ -61,21 +70,43 @@ def create_wind_rose(wind_speed, wind_dir, title, ax=None):
 
     # Create windrose plot
     ax.bar(wind_dir_clean, wind_speed_clean, opening=0.8, edgecolor='white')
-    ax.set_legend(title="Wind speed (knots)")
-    ax.set_title(title, fontsize=10)
+    # Move legend to upper right corner with more lateral padding
+    ax.set_legend(title=f"Velocidade do vento ({WIND_SPEED_UNITS[output_unit]['label']})", bbox_to_anchor=(1.3, 1.1), loc='upper right')
+    ax.set_title(title, fontsize=10, pad=20)
 
 # Function to create combined wind roses (all bins in one figure)
-def plot_combined_wind_roses(data):
-    fig = plt.figure(figsize=(20, 15))
+def plot_combined_wind_roses(data, output_unit):
+    # Adjust figure size to better fit corner legends
+    fig = plt.figure(figsize=(22, 15))
 
-    speed_ranges = [
-        (1, 5, "Velocidade: 1-5 kt"),
-        (6, 10, "Velocidade: 6-10 kt"),
-        (11, 15, "Velocidade: 11-15 kt"),
-        (16, 20, "Velocidade: 16-20 kt"),
-        (21, 30, "Velocidade: 21-30 kt"),
-        (31, np.inf, "Velocidade: > 30 kt")
-    ]
+    # Adjust speed ranges based on selected unit
+    if output_unit == "knots":
+        speed_ranges = [
+            (1, 5, "Velocidade: 1-5 kt"),
+            (6, 10, "Velocidade: 6-10 kt"),
+            (11, 15, "Velocidade: 11-15 kt"),
+            (16, 20, "Velocidade: 16-20 kt"),
+            (21, 30, "Velocidade: 21-30 kt"),
+            (31, np.inf, "Velocidade: > 30 kt")
+        ]
+    elif output_unit == "m/s":
+        speed_ranges = [
+            (0.5, 2.5, "Velocidade: 0.5-2.5 m/s"),
+            (2.6, 5, "Velocidade: 2.6-5 m/s"),
+            (5.1, 7.5, "Velocidade: 5.1-7.5 m/s"),
+            (7.6, 10, "Velocidade: 7.6-10 m/s"),
+            (10.1, 15, "Velocidade: 10.1-15 m/s"),
+            (15.1, np.inf, "Velocidade: > 15 m/s")
+        ]
+    else:  # km/h
+        speed_ranges = [
+            (2, 9, "Velocidade: 2-9 km/h"),
+            (10, 18, "Velocidade: 10-18 km/h"),
+            (19, 27, "Velocidade: 19-27 km/h"),
+            (28, 36, "Velocidade: 28-36 km/h"),
+            (37, 54, "Velocidade: 37-54 km/h"),
+            (55, np.inf, "Velocidade: > 54 km/h")
+        ]
 
     for i, (min_speed, max_speed, title) in enumerate(speed_ranges, 1):
         mask = (data['wind_speed'] >= min_speed) & (data['wind_speed'] < max_speed)
@@ -85,19 +116,23 @@ def plot_combined_wind_roses(data):
             continue
 
         ax = fig.add_subplot(2, 3, i, projection='windrose')
-        create_wind_rose(data.loc[mask, 'wind_speed'], data.loc[mask, 'wind_dir'], title, ax)
+        create_wind_rose(data.loc[mask, 'wind_speed'], data.loc[mask, 'wind_dir'], title, output_unit, ax)
 
-    plt.tight_layout()
+    # Adjust layout to prevent legend overlap
+    plt.tight_layout(rect=[0, 0, 0.95, 0.95])
     return fig
 
 # Function to plot a single wind rose for a given speed range
-def plot_single_wind_rose(data, min_speed, max_speed, title):
-    fig = plt.figure(figsize=(7, 7))
+def plot_single_wind_rose(data, min_speed, max_speed, title, output_unit):
+    # Adjust figure size for corner legend
+    fig = plt.figure(figsize=(8, 8))
     mask = (data['wind_speed'] >= min_speed) & (data['wind_speed'] < max_speed)
     if mask.sum() == 0:  # Skip if no data in the range
         return None
     ax = fig.add_subplot(1, 1, 1, projection='windrose')
-    create_wind_rose(data.loc[mask, 'wind_speed'], data.loc[mask, 'wind_dir'], title, ax)
+    create_wind_rose(data.loc[mask, 'wind_speed'], data.loc[mask, 'wind_dir'], title, output_unit, ax)
+    # Adjust layout to prevent legend overlap
+    plt.tight_layout(rect=[0, 0, 0.95, 0.95])
     return fig
 
 # Function to convert Matplotlib figure to a downloadable PNG
@@ -110,6 +145,14 @@ def fig_to_png(fig):
 # Streamlit app layout and logic
 st.title("Wind Rose Plot Generator")
 
+# Add unit selection dropdown
+output_unit = st.selectbox(
+    "Select Wind Speed Unit",
+    options=list(WIND_SPEED_UNITS.keys()),
+    format_func=lambda x: WIND_SPEED_UNITS[x]["label"].upper(),
+    index=0  # Default to knots
+)
+
 # Upload CSV files
 uploaded_files = st.file_uploader("Upload CSV Files", accept_multiple_files=True, type=["csv"])
 
@@ -117,8 +160,8 @@ if uploaded_files:
     st.write(f"Uploaded {len(uploaded_files)} file(s).")
 
     if st.button("Generate Wind Rose Plots"):
-        # Process the uploaded files
-        combined_data, invalid_files = process_csv_data(uploaded_files)
+        # Process the uploaded files with selected unit
+        combined_data, invalid_files = process_csv_data(uploaded_files, output_unit)
 
         if len(invalid_files) == len(uploaded_files):
             st.write("No valid data found in the uploaded files.")
@@ -126,9 +169,10 @@ if uploaded_files:
 
         if len(invalid_files) > 0:
             st.warning(f"Data not found in the following files: {', '.join(invalid_files)}")
+        
         # Generate the combined wind rose plot (all bins in one figure)
         st.subheader("Combined Wind Rose Plot")
-        combined_fig = plot_combined_wind_roses(combined_data)
+        combined_fig = plot_combined_wind_roses(combined_data, output_unit)
         st.pyplot(combined_fig)
 
         # Provide a download button for the combined plot
@@ -136,35 +180,52 @@ if uploaded_files:
         st.download_button(
             label="Download Combined Wind Rose",
             data=combined_png_data,
-            file_name="combined_wind_rose.png",
+            file_name=f"combined_wind_rose_{output_unit}.png",
             mime="image/png"
         )
 
-        # Define speed ranges
-        speed_ranges = [
-            (1, 5, "Velocidade: 1-5 kt"),
-            (6, 10, "Velocidade: 6-10 kt"),
-            (11, 15, "Velocidade: 11-15 kt"),
-            (16, 20, "Velocidade: 16-20 kt"),
-            (21, 30, "Velocidade: 21-30 kt"),
-            (31, np.inf, "Velocidade: > 30 kt")
-        ]
+        # Get appropriate speed ranges based on selected unit
+        if output_unit == "knots":
+            speed_ranges = [
+                (1, 5, "Velocidade: 1-5 kt"),
+                (6, 10, "Velocidade: 6-10 kt"),
+                (11, 15, "Velocidade: 11-15 kt"),
+                (16, 20, "Velocidade: 16-20 kt"),
+                (21, 30, "Velocidade: 21-30 kt"),
+                (31, np.inf, "Velocidade: > 30 kt")
+            ]
+        elif output_unit == "m/s":
+            speed_ranges = [
+                (0.5, 2.5, "Velocidade: 0.5-2.5 m/s"),
+                (2.6, 5, "Velocidade: 2.6-5 m/s"),
+                (5.1, 7.5, "Velocidade: 5.1-7.5 m/s"),
+                (7.6, 10, "Velocidade: 7.6-10 m/s"),
+                (10.1, 15, "Velocidade: 10.1-15 m/s"),
+                (15.1, np.inf, "Velocidade: > 15 m/s")
+            ]
+        else:  # km/h
+            speed_ranges = [
+                (2, 9, "Velocidade: 2-9 km/h"),
+                (10, 18, "Velocidade: 10-18 km/h"),
+                (19, 27, "Velocidade: 19-27 km/h"),
+                (28, 36, "Velocidade: 28-36 km/h"),
+                (37, 54, "Velocidade: 37-54 km/h"),
+                (55, np.inf, "Velocidade: > 54 km/h")
+            ]
 
         # Display wind roses for each speed range and provide download buttons
         for min_speed, max_speed, title in speed_ranges:
             st.subheader(title)
-            fig = plot_single_wind_rose(combined_data, min_speed, max_speed, title)
+            fig = plot_single_wind_rose(combined_data, min_speed, max_speed, title, output_unit)
             if fig:
                 st.pyplot(fig)
 
                 # Provide download button for each plot
-                # If plot is None, the button will not be displayed
-
                 png_data = fig_to_png(fig)
                 st.download_button(
                     label=f"Download {title} Wind Rose",
                     data=png_data,
-                    file_name=f"{title.replace(' ', '_').replace(':', '')}_wind_rose.png",
+                    file_name=f"{title.replace(' ', '_').replace(':', '')}_{output_unit}.png",
                     mime="image/png"
                 )
             else:
